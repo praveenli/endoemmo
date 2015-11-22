@@ -1,0 +1,123 @@
+package com.wf.sqlutil;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Scope;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+@Component(value = "SqlExecutor")
+@Lazy(value = true)
+@Scope(value = ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+public class SqlExecutor {
+
+	@Autowired
+	@Qualifier("dataUtil")
+
+	private DatasourceUtil dataUtil;
+
+	public void executeQuery(String query, String jndiName) {
+		QueryModes queryMode = null;
+		if (null == dataUtil) {
+			System.out.println("dataUtil is null");
+			return;
+		}
+		JdbcTemplate jTemplate = dataUtil.getDataSource(jndiName);
+		if (query.trim().toLowerCase().startsWith("select")) {
+			queryMode = QueryModes.SELECT;
+		} else if (query.trim().toLowerCase().startsWith("update") 
+						|| query.trim().toLowerCase().startsWith("insert")) {
+			queryMode = QueryModes.INSERTORUPDATE;
+		} else {
+			queryMode = QueryModes.NIL;
+		}
+
+		switch (queryMode) {
+		case SELECT:
+			executeSelect(query, jTemplate);
+			break;
+		case INSERTORUPDATE:
+			executeUpdateOrInsert(query, jTemplate);
+			break;
+		case NIL:
+			throw new IllegalArgumentException("invalid query : " + queryMode);
+		}
+
+	}
+
+	public int executeUpdateOrInsert(String sql, JdbcTemplate jTemplate) {
+		int count = -1;
+		if (null == jTemplate) {
+			return count;
+		}
+		count = jTemplate.update(sql);
+		return count;
+	}
+
+	public List<Map<String, Object>> executeSelect(String sql, JdbcTemplate jTemplate) {
+		if (null == jTemplate) {
+			return null;
+		}
+		List<Map<String, Object>> aList = jTemplate.queryForList(sql);
+		for (Map map : aList) {
+			Iterator it = map.entrySet().iterator();
+			while (it.hasNext()) {
+				Map.Entry pair = (Map.Entry) it.next();
+				System.out.println(pair.getKey() + " = " + pair.getValue());
+			}
+		}
+		return aList;
+	}
+}
+package com.wf.sqlutil;
+
+public enum QueryModes {
+
+	SELECT, INSERTORUPDATE, NIL;
+
+}
+package com.wf.sqlutil;
+
+import javax.naming.Context;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.sql.DataSource;
+
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Scope;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+@Component(value = "dataUtil")
+@Lazy(value = true)
+@Scope(value = ConfigurableBeanFactory.SCOPE_PROTOTYPE)
+public class DatasourceUtil {
+
+	public JdbcTemplate getDataSource(String jndiName) {
+		Context initCtx;
+		Context envCtx;
+		DataSource ds;
+		System.out.println("dtasource util class");
+		JdbcTemplate jTemplate = null;
+		try {
+			initCtx = new InitialContext();
+			envCtx = (Context) initCtx.lookup("java:comp/env");
+			ds = (DataSource) envCtx.lookup(jndiName);
+			jTemplate = new JdbcTemplate(ds);
+		} catch (NamingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return jTemplate;
+	}
+
+}
